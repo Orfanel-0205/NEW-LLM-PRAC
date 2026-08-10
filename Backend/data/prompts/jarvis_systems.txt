@@ -1,0 +1,10 @@
+1. Programming,Stack,"A stack is a Last-In, First-Out (LIFO) data structure used for function calls, undo operations, and expression evaluation.","stack,lifo,data structure",Computer Science Fundamentals
+2. Programming,Queue,"A queue is a First-In, First-Out (FIFO) data structure commonly used for scheduling, buffering, and breadth-first search.","queue,fifo,data structure",Computer Science Fundamentals
+3. Programming,Python Functions,Functions are reusable blocks of code that perform a specific task and may accept parameters and return values.,"python,function",Python Documentation
+4. Programming,Object-Oriented Programming,"OOP organizes software into classes and objects using encapsulation, inheritance, abstraction, and polymorphism.","oop,class,object",Software Engineering
+5. Software Engineering,Git,Git is a distributed version control system for tracking changes in source code and collaborating on software projects.,"git,version control",Git Documentation
+6. Architecture,Foundation,A building foundation transfers structural loads safely into the ground and provides stability.,"foundation,building",Civil Engineering Handbook
+7. Architecture,Reinforced Concrete,Reinforced concrete combines concrete and steel reinforcement to improve tensile strength.,"concrete,rebar",Structural Engineering
+8. Machinery,Lathe Machine,A lathe rotates a workpiece while cutting tools shape it into cylindrical parts.,"lathe,machining",Manufacturing Handbook
+9. Education,Newton's First Law,An object remains at rest or in uniform motion unless acted upon by a net external force.,"physics,newton",Physics Textbook
+10. Artificial Intelligence,Retrieval-Augmented Generation,"RAG retrieves relevant knowledge before sending context to an LLM, improving factual accuracy.","rag,llm,embeddings",AI Engineering

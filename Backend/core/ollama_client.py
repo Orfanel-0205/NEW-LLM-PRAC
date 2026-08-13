@@ -37,7 +37,7 @@ class OllamaClient:
 
     def chat(
         self,
-        messages: List[Dict[str, str]],
+        messages: List[Dict[str, Any]],
         model_name: Optional[str] = None,
         stream: bool = False,
         options: Optional[Dict[str, Any]] = None,

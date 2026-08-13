@@ -4,6 +4,7 @@ import os
 
 DEFAULT_OLLAMA_URL = os.getenv("OLLAMA_URL", "http://localhost:11434/api/chat")
 DEFAULT_MODEL = os.getenv("OLLAMA_MODEL", "llama3.2")
+VISION_MODEL = os.getenv("OLLAMA_VISION_MODEL", "qwen3-vl:2b")
 DEFAULT_TIMEOUT = int(os.getenv("OLLAMA_TIMEOUT", "300"))
 API_HOST = os.getenv("JARVIS_API_HOST", "0.0.0.0")
 API_PORT = int(os.getenv("JARVIS_API_PORT", "8000"))

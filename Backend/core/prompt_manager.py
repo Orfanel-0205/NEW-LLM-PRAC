@@ -23,6 +23,8 @@ decompose the problem, compare viable approaches, and finish with a concrete nex
     "ar": """Act as an augmented-reality engineering advisor. Consider tracking, anchors, coordinate spaces,
 lighting, occlusion, device support, performance, UX safety, and whether Expo Go versus a native development
 build can support the proposed feature.""",
+    "ux": """Act as a senior UX architect. Map actors, screens, actions, decisions, success states, error states,
+and recovery paths. Keep flows testable, accessible, and explicit about system feedback and user control.""",
 }
 
 

@@ -7,12 +7,14 @@ the Expo app is the mobile interface.
 ## What works in this MVP
 
 - Local Ollama chat through a versioned FastAPI backend
-- Specialized coding, architecture, debugging, problem-solving, and AR prompts
+- Specialized coding, architecture, UX-flow, debugging, problem-solving, and AR prompts
 - SQLite conversation memory, isolated by session
 - Health, chat, history, and clear-session endpoints
 - Expo Go TypeScript app with status feedback and mode selection
-- On-device text-to-speech by long-pressing a Jarvis response
-- Camera-based AR overlay prototype
+- Push-to-talk with offline Whisper transcription
+- Custom local Danny/Piper voice with personalized startup greeting
+- Front/rear camera technical analysis using Qwen3-VL
+- Draggable holographic architecture and UX workflow cards
 - Optional bearer-token protection
 
 The model cannot execute terminal commands. This is intentional until command allowlists,
@@ -31,6 +33,7 @@ Then download a model:
 
 ```powershell
 ollama pull llama3.2
+ollama pull qwen3-vl:2b
 ```
 
 For visual scene analysis later, also consider a vision-capable Ollama model. The current AR

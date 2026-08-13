@@ -1,9 +1,8 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { CameraView, useCameraPermissions } from 'expo-camera';
-import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
-import * as Speech from 'expo-speech';
+import { useCameraPermissions } from 'expo-camera';
+import { AudioModule, RecordingPresets, setAudioModeAsync, useAudioPlayer, useAudioRecorder, useAudioRecorderState } from 'expo-audio';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -18,7 +17,8 @@ import {
   View,
 } from 'react-native';
 import { ArchitectureDiagram } from './src/ArchitectureDiagram';
-import { API_URL, ArchitectureBlueprint, ChatMessage, clearSession, generateArchitecture, getHealth, JarvisMode, sendChat, transcribeAudio } from './src/api';
+import { HolographicAR } from './src/HolographicAR';
+import { API_URL, ArchitectureBlueprint, ChatMessage, clearSession, generateArchitecture, getHealth, JarvisMode, sendChat, speechSource, transcribeAudio } from './src/api';
 
 const MODES: { id: JarvisMode; label: string; hint: string }[] = [
   { id: 'coding', label: 'Code', hint: 'Build, explain, or review code…' },
@@ -26,6 +26,7 @@ const MODES: { id: JarvisMode; label: string; hint: string }[] = [
   { id: 'debugging', label: 'Debug', hint: 'Paste an error, symptom, or log…' },
   { id: 'problem_solving', label: 'Solve', hint: 'Describe the objective and constraints…' },
   { id: 'ar', label: 'AR Lab', hint: 'Ask about this AR scene or implementation…' },
+  { id: 'ux', label: 'UX Flow', hint: 'Describe screens, actors, decisions, and recovery paths…' },
 ];
 const SESSION_KEY = 'jarvis.session';
 
@@ -44,7 +45,15 @@ export default function App() {
   const [permission, requestPermission] = useCameraPermissions();
   const recorder = useAudioRecorder(RecordingPresets.HIGH_QUALITY);
   const recorderState = useAudioRecorderState(recorder, 250);
+  const voicePlayer = useAudioPlayer(null);
+  const greeted = useRef(false);
   const list = useRef<FlatList<ChatMessage>>(null);
+
+  const speak = useCallback((text: string) => {
+    voicePlayer.pause();
+    voicePlayer.replace(speechSource(text));
+    voicePlayer.play();
+  }, [voicePlayer]);
 
   useEffect(() => {
     AsyncStorage.getItem(SESSION_KEY).then((value) => value && setSessionId(value));
@@ -56,6 +65,10 @@ export default function App() {
     try {
       const health = await getHealth();
       setServer(health.ollama ? 'ready' : 'ollama-offline');
+      if (health.ollama && !greeted.current) {
+        greeted.current = true;
+        speak('Greetings sir Clifford');
+      }
     } catch {
       setServer('offline');
     }
@@ -76,13 +89,13 @@ export default function App() {
         ...current,
         { id: `${Date.now()}-a`, role: 'assistant', content: result.reply },
       ]);
-      if (autoSpeak) Speech.speak(result.reply, { rate: 0.95 });
-      if (mode === 'architecture' || mode === 'ar') {
+      if (autoSpeak) speak(result.reply);
+      if (mode === 'architecture' || mode === 'ar' || mode === 'ux') {
         try {
           const structure = await generateArchitecture(content);
           setBlueprint(structure);
           if (mode === 'architecture') setBlueprintOpen(true);
-          if (autoSpeak) Speech.speak(structure.summary, { rate: 0.92 });
+          if (autoSpeak) speak(structure.summary);
         } catch (architectureError) {
           const detail = architectureError instanceof Error ? architectureError.message : 'Blueprint failed';
           setMessages((current) => [...current, { id: `${Date.now()}-arch`, role: 'assistant', content: `Blueprint unavailable: ${detail}` }]);
@@ -122,7 +135,7 @@ export default function App() {
       }
       return;
     }
-    Speech.stop();
+    voicePlayer.pause();
     const status = await AudioModule.requestRecordingPermissionsAsync();
     if (!status.granted) return Alert.alert('Microphone required', 'Allow microphone access to talk to Jarvis.');
     await setAudioModeAsync({ allowsRecording: true, playsInSilentMode: true });
@@ -133,7 +146,7 @@ export default function App() {
   async function startFresh() {
     if (sessionId) await clearSession(sessionId).catch(() => undefined);
     await AsyncStorage.removeItem(SESSION_KEY);
-    Speech.stop();
+    voicePlayer.pause();
     setSessionId(undefined);
     setMessages([]);
     setBlueprint(undefined);
@@ -155,23 +168,7 @@ export default function App() {
   }[server];
 
   if (cameraOpen) {
-    return (
-      <View style={styles.cameraPage}>
-        <CameraView style={StyleSheet.absoluteFill} facing="back" />
-        <SafeAreaView style={styles.cameraOverlay}>
-          <View style={styles.cameraHeader}>
-            <Text style={styles.cameraTitle}>AR LAB · SCENE VIEW</Text>
-            <Pressable style={styles.smallButton} onPress={() => setCameraOpen(false)}><Text style={styles.buttonText}>Close</Text></Pressable>
-          </View>
-          <View style={styles.reticle}><View style={styles.reticleDot} /></View>
-          {blueprint ? <View style={styles.arStructure}>
-            <Text style={styles.arTitle}>{blueprint.title}</Text>
-            {blueprint.nodes.slice(0, 6).map((node, index) => <View key={node.id} style={[styles.arNode, { marginLeft: (index % 2) * 45 }]}><Text style={styles.arNodeText}>{node.label}</Text><Text style={styles.arNodeKind}>{node.kind}</Text></View>)}
-            <Pressable style={styles.narrateButton} onPress={() => Speech.speak(blueprint.summary, { rate: 0.92 })}><Text style={styles.buttonText}>◉ Narrate structure</Text></Pressable>
-          </View> : <Text style={styles.cameraHelp}>Ask Jarvis for a software architecture first, then return here to project and narrate it over the camera.</Text>}
-        </SafeAreaView>
-      </View>
-    );
+    return <HolographicAR blueprint={blueprint} onClose={() => setCameraOpen(false)} onSpeak={speak} />;
   }
 
   return (
@@ -183,7 +180,7 @@ export default function App() {
           <Pressable onPress={startFresh} style={styles.smallButton}><Text style={styles.buttonText}>New chat</Text></Pressable>
         </View>
         <View style={styles.actionRow}>
-          <Pressable style={[styles.actionChip, autoSpeak && styles.actionChipActive]} onPress={() => { Speech.stop(); setAutoSpeak((value) => !value); }}><Text style={styles.actionText}>{autoSpeak ? '🔊 Voice on' : '🔇 Voice off'}</Text></Pressable>
+          <Pressable style={[styles.actionChip, autoSpeak && styles.actionChipActive]} onPress={() => { voicePlayer.pause(); setAutoSpeak((value) => !value); }}><Text style={styles.actionText}>{autoSpeak ? 'Voice on' : 'Voice off'}</Text></Pressable>
           {blueprint && <Pressable style={styles.actionChip} onPress={() => setBlueprintOpen((value) => !value)}><Text style={styles.actionText}>{blueprintOpen ? 'Chat' : 'Blueprint'}</Text></Pressable>}
           <Pressable style={styles.actionChip} onPress={openCamera}><Text style={styles.actionText}>AR view</Text></Pressable>
         </View>
@@ -212,7 +209,7 @@ export default function App() {
           ListEmptyComponent={<View><Text style={styles.emptyTitle}>What are we building?</Text><Text style={styles.emptyCopy}>Choose a specialist mode, share the context, and Jarvis will help you reason through it.</Text></View>}
           renderItem={({ item }) => (
             <Pressable
-              onLongPress={() => item.role === 'assistant' && Speech.speak(item.content)}
+              onLongPress={() => item.role === 'assistant' && speak(item.content)}
               style={[styles.bubble, item.role === 'user' ? styles.userBubble : styles.jarvisBubble]}
             >
               <Text style={styles.role}>{item.role === 'user' ? 'YOU' : 'JARVIS · hold to speak'}</Text>

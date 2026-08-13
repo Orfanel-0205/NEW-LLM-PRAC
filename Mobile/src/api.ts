@@ -1,4 +1,4 @@
-export type JarvisMode = 'coding' | 'architecture' | 'debugging' | 'problem_solving' | 'ar';
+export type JarvisMode = 'coding' | 'architecture' | 'debugging' | 'problem_solving' | 'ar' | 'ux';
 
 export type ChatMessage = {
   id: string;
@@ -9,7 +9,7 @@ export type ChatMessage = {
 export type ArchitectureNode = {
   id: string;
   label: string;
-  kind: 'client' | 'service' | 'data' | 'external';
+  kind: 'client' | 'service' | 'data' | 'external' | 'actor' | 'screen' | 'action' | 'decision';
   description: string;
 };
 
@@ -89,4 +89,23 @@ export async function generateArchitecture(request: string): Promise<Architectur
       body: JSON.stringify({ request }),
     }),
   );
+}
+
+export function speechSource(text: string): { uri: string; headers?: Record<string, string> } {
+  return {
+    uri: `${API_URL}/api/speech?text=${encodeURIComponent(text.slice(0, 1200))}`,
+    ...(token ? { headers: { Authorization: `Bearer ${token}` } } : {}),
+  };
+}
+
+export async function analyzeVision(uri: string, question: string): Promise<string> {
+  const form = new FormData();
+  form.append('image', { uri, name: 'jarvis-scene.jpg', type: 'image/jpeg' } as unknown as Blob);
+  form.append('question', question);
+  const response = await fetch(`${API_URL}/api/vision/analyze`, {
+    method: 'POST',
+    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+    body: form,
+  });
+  return (await parse<{ analysis: string }>(response)).analysis;
 }

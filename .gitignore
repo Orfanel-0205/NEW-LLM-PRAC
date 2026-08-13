@@ -4,6 +4,7 @@ __pycache__/
 .venv/
 Backend/data/*.db
 Backend/*.log
+Backend/data/voices/*.onnx
 Mobile/node_modules/
 Mobile/.expo/
 Mobile/.env.local

@@ -13,7 +13,7 @@ from core.ollama_client import OllamaClient
 class ArchitectureNode(BaseModel):
     id: str = Field(pattern=r"^[a-zA-Z0-9_-]+$", max_length=40)
     label: str = Field(max_length=60)
-    kind: str = Field(pattern=r"^(client|service|data|external)$")
+    kind: str = Field(pattern=r"^(client|service|data|external|actor|screen|action|decision)$")
     description: str = Field(max_length=180)
 
 
@@ -43,10 +43,12 @@ class ArchitectureBlueprint(BaseModel):
 ARCHITECT_PROMPT = """You are a software architect. Convert the request into a small, practical
 software architecture. Return JSON only with this exact shape:
 {"title":"...","summary":"spoken explanation in 2-4 sentences","nodes":[{"id":"short_id",
-"label":"...","kind":"client|service|data|external","description":"..."}],
+"label":"...","kind":"client|service|data|external|actor|screen|action|decision","description":"..."}],
 "edges":[{"source":"node_id","target":"node_id","label":"protocol or data"}]}.
-Use 2-10 nodes, valid referenced IDs, and no markdown. Include security and observability components
-only when justified by the request. The summary must explain the main data flow and tradeoff."""
+Use 2-10 nodes, valid referenced IDs, and no markdown. For a UX/workflow request, use actor, screen,
+action, and decision nodes in journey order and include error/recovery paths. For software systems, use
+client, service, data, and external. Include security and observability only when justified. The summary
+must explain the main flow and tradeoff."""
 
 
 class ArchitectureGenerator:
@@ -85,7 +87,8 @@ class ArchitectureGenerator:
             if not isinstance(raw_node, dict):
                 continue
             kind = str(raw_node.get("kind", "service")).lower().strip()
-            raw_node["kind"] = kind_aliases.get(kind, kind if kind in {"client", "service", "data", "external"} else "service")
+            valid_kinds = {"client", "service", "data", "external", "actor", "screen", "action", "decision"}
+            raw_node["kind"] = kind_aliases.get(kind, kind if kind in valid_kinds else "service")
             raw_node["label"] = str(raw_node.get("label", "Component"))[:60]
             raw_node["description"] = str(raw_node.get("description", ""))[:180]
         payload["title"] = str(payload.get("title", "Software Architecture"))[:100]

@@ -7,15 +7,13 @@ const NODE_W = 150;
 const NODE_H = 70;
 const COLORS: Record<ArchitectureNode['kind'], string> = {
   client: '#38bdf8', service: '#34d399', data: '#f59e0b', external: '#c084fc',
+  actor: '#f472b6', screen: '#22d3ee', action: '#a3e635', decision: '#fb7185',
 };
 
 function layout(blueprint: ArchitectureBlueprint) {
-  const columns: ArchitectureNode['kind'][] = ['client', 'service', 'data', 'external'];
   const positions = new Map<string, { x: number; y: number }>();
-  columns.forEach((kind, column) => {
-    blueprint.nodes.filter((node) => node.kind === kind).forEach((node, row) => {
-      positions.set(node.id, { x: 25 + column * 175, y: 35 + row * 115 });
-    });
+  blueprint.nodes.forEach((node, index) => {
+    positions.set(node.id, { x: 25 + (index % 4) * 175, y: 35 + Math.floor(index / 4) * 115 });
   });
   return positions;
 }

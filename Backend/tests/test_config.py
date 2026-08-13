@@ -13,7 +13,7 @@ class ConfigTests(unittest.TestCase):
 
         self.assertEqual(reloaded.DEFAULT_OLLAMA_URL, "http://localhost:11434/api/chat")
         self.assertEqual(reloaded.DEFAULT_MODEL, "llama3.2")
-        self.assertEqual(reloaded.DEFAULT_TIMEOUT, 60)
+        self.assertEqual(reloaded.DEFAULT_TIMEOUT, 300)
 
     def test_environment_variables_override_defaults(self) -> None:
         import core.config as config_module

@@ -23,6 +23,18 @@ class OllamaClient:
         self.model_name = model_name
         self.timeout = timeout
 
+    @property
+    def server_url(self) -> str:
+        return self.base_url.split("/api/", 1)[0]
+
+    def is_available(self) -> bool:
+        request = urllib.request.Request(f"{self.server_url}/api/tags", method="GET")
+        try:
+            with urllib.request.urlopen(request, timeout=min(self.timeout, 3)) as response:
+                return 200 <= response.status < 300
+        except (urllib.error.URLError, TimeoutError):
+            return False
+
     def chat(
         self,
         messages: List[Dict[str, str]],

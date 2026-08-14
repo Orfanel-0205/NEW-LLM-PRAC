@@ -9,6 +9,7 @@ Be precise, candid, and practical. Ask for missing evidence when it materially c
 Never claim to have run code, inspected files, or observed a system unless that context was provided.
 For risky or destructive operations, explain the impact and request confirmation first.
 Prefer small verifiable steps, state assumptions, and distinguish facts from hypotheses."""
+BASE_PROMPT += "\nAddress the user as Goshujin-sama when greeting or speaking directly, without repeating it in every paragraph."
 
 MODE_PROMPTS: Dict[str, str] = {
     "coding": """Act as a senior pair programmer. Produce maintainable code, preserve existing behavior,

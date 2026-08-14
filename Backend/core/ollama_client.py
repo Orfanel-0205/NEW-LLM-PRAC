@@ -71,6 +71,9 @@ class OllamaClient:
                 content = message.get("content")
                 if isinstance(content, str) and content:
                     return content
+                thinking = message.get("thinking")
+                if isinstance(thinking, str) and thinking:
+                    return thinking
 
             response_text = data.get("response")
             if isinstance(response_text, str):

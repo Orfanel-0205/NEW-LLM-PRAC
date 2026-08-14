@@ -67,7 +67,7 @@ export default function App() {
       setServer(health.ollama ? 'ready' : 'ollama-offline');
       if (health.ollama && !greeted.current) {
         greeted.current = true;
-        speak('Greetings sir Clifford');
+        speak('Okaerinasaimase, Goshujin-sama. Jarvis is online.');
       }
     } catch {
       setServer('offline');
@@ -196,7 +196,7 @@ export default function App() {
           showsHorizontalScrollIndicator={false}
           renderItem={({ item }) => (
             <Pressable
-              onPress={() => setMode(item.id)}
+              onPress={() => { setMode(item.id); if (item.id === 'ar') openCamera(); }}
               style={[styles.mode, mode === item.id && styles.modeActive]}
             ><Text style={[styles.modeText, mode === item.id && styles.modeTextActive]}>{item.label}</Text></Pressable>
           )}

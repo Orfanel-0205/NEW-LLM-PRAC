@@ -1,31 +1,37 @@
 import json
 
-from core.vision import VisionDetector
+from core.vision import VisionAnalyzer
 
 
-class FakeClient:
+class FakeVisionClient:
     def chat(self, messages, **kwargs):
+        assert messages[0]["images"] == ["base64-image"]
+        assert kwargs["format"] == "json"
         return json.dumps({
-            "scene": "Desk with monitor",
-            "objects": [{
-                "id": "monitor", "label": "Monitor", "category": "device",
-                "confidence": 0.9, "box": [100, 100, 700, 600], "observation": "Editor visible",
+            "scene": "A browser showing an error",
+            "spoken_update": "Goshujin-sama, a network error is visible.",
+            "detections": [{
+                "id": "error",
+                "label": "Network error",
+                "box": [100, 200, 800, 500],
+                "observation": "ERR_CONNECTION_REFUSED is visible",
+                "suggestion": "Verify the local API port",
             }],
-            "suggestions": ["Inspect the visible error"],
-            "speak": "A monitor is visible, Goshujin-sama.",
         })
 
 
-def test_detector_builds_normalized_map():
-    result = VisionDetector(FakeClient()).detect(b"image")
-    assert result.objects[0].box == [100, 100, 700, 600]
-    assert "Goshujin-sama" in result.speak
+def test_vision_analyzer_returns_positioned_detections():
+    result = VisionAnalyzer(FakeVisionClient()).analyze("base64-image", "inspect")
+    assert result.detections[0].box == [100, 200, 800, 500]
+    assert "Goshujin-sama" in result.spoken_update
 
 
-def test_person_label_does_not_preserve_inferred_attributes():
-    payload = {
-        "scene": "Person present", "suggestions": [], "speak": "Person detected",
-        "objects": [{"id": "p", "label": "Young person age 20", "category": "person", "confidence": 0.8, "box": [1, 1, 9, 9], "observation": "Standing"}],
-    }
-    normalized = VisionDetector._normalize(payload)
-    assert normalized["objects"][0]["label"] == "Person"
+def test_vision_analyzer_discards_invalid_boxes():
+    class InvalidBoxClient(FakeVisionClient):
+        def chat(self, messages, **kwargs):
+            payload = json.loads(super().chat(messages, **kwargs))
+            payload["detections"][0]["box"] = [900, 200, 100, 500]
+            return json.dumps(payload)
+
+    result = VisionAnalyzer(InvalidBoxClient()).analyze("base64-image", "inspect")
+    assert result.detections == []

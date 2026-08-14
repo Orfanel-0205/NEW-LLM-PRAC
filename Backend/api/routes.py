@@ -21,7 +21,7 @@ from core.orchestrator import Orchestrator
 from core.prompt_manager import available_modes
 from core.transcription import LocalTranscriber
 from core.speech import SpeechSynthesizer
-from core.vision import SceneDetection, VisionDetector
+from core.vision import VisionAnalyzer, VisionResult
 
 router = APIRouter(prefix="/api")
 client = OllamaClient()
@@ -30,7 +30,7 @@ orchestrator = Orchestrator(client=client, memory=memory)
 architecture_generator = ArchitectureGenerator(client)
 transcriber = LocalTranscriber()
 speech_synthesizer = SpeechSynthesizer()
-vision_detector = VisionDetector(client)
+vision_analyzer = VisionAnalyzer(client)
 MAX_AUDIO_BYTES = 15 * 1024 * 1024
 
 
@@ -130,51 +130,20 @@ async def transcribe(audio: UploadFile = File(...)) -> dict:
             os.unlink(temp_path)
 
 
-@router.post("/vision/analyze", dependencies=[Depends(authorize)])
+@router.post("/vision/analyze", response_model=VisionResult, dependencies=[Depends(authorize)])
 async def analyze_vision(
     image: UploadFile = File(...),
     question: str = Form(default="Inspect this scene for technical information, errors, UI state, and actionable next steps."),
-) -> dict:
+) -> VisionResult:
     contents = await image.read(8 * 1024 * 1024 + 1)
     await image.close()
     if not contents or len(contents) > 8 * 1024 * 1024:
         raise HTTPException(status_code=413, detail="Image must be between 1 byte and 8 MB")
     image_data = base64.b64encode(contents).decode("ascii")
-    prompt = f"""You are Jarvis visual diagnostics. Focus on technical evidence in the image:
-visible errors, logs, code, browser/devtool state, architecture, controls, and workflows.
-Do not identify or infer sensitive personal traits. Distinguish what is clearly visible from hypotheses.
-Answer the user's question, then give the most useful next diagnostic action.
-
-Question: {question[:3000]}"""
     try:
-        analysis = client.chat(
-            [{"role": "user", "content": prompt, "images": [image_data]}],
-            model_name=VISION_MODEL,
-            options={"temperature": 0.2},
-            keep_alive="30m",
-        )
+        return vision_analyzer.analyze(image_data, question)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
-    return {"analysis": analysis, "model": VISION_MODEL}
-
-
-@router.post(
-    "/vision/detect",
-    response_model=SceneDetection,
-    dependencies=[Depends(authorize)],
-)
-async def detect_objects(
-    image: UploadFile = File(...),
-    focus: str = Form(default="Prioritize technical objects, screens, readable errors, and useful actions."),
-) -> SceneDetection:
-    contents = await image.read(8 * 1024 * 1024 + 1)
-    await image.close()
-    if not contents or len(contents) > 8 * 1024 * 1024:
-        raise HTTPException(status_code=413, detail="Image must be between 1 byte and 8 MB")
-    try:
-        return vision_detector.detect(contents, focus)
-    except RuntimeError as exc:
-        raise HTTPException(status_code=502, detail=str(exc)) from exc
 
 
 @router.get("/sessions/{session_id}/messages", dependencies=[Depends(authorize)])

@@ -22,6 +22,20 @@ export type ArchitectureBlueprint = {
   edges: ArchitectureEdge[];
 };
 
+export type VisionDetection = {
+  id: string;
+  label: string;
+  box: [number, number, number, number];
+  observation: string;
+  suggestion: string;
+};
+
+export type VisionResult = {
+  scene: string;
+  spoken_update: string;
+  detections: VisionDetection[];
+};
+
 type ChatResponse = { reply: string; session_id: string; mode: JarvisMode };
 type HealthResponse = { status: string; ollama: boolean; model: string; modes: JarvisMode[] };
 
@@ -98,7 +112,7 @@ export function speechSource(text: string): { uri: string; headers?: Record<stri
   };
 }
 
-export async function analyzeVision(uri: string, question: string): Promise<string> {
+export async function analyzeVision(uri: string, question: string): Promise<VisionResult> {
   const form = new FormData();
   form.append('image', { uri, name: 'jarvis-scene.jpg', type: 'image/jpeg' } as unknown as Blob);
   form.append('question', question);
@@ -107,5 +121,5 @@ export async function analyzeVision(uri: string, question: string): Promise<stri
     headers: token ? { Authorization: `Bearer ${token}` } : undefined,
     body: form,
   });
-  return (await parse<{ analysis: string }>(response)).analysis;
+  return parse<VisionResult>(response);
 }

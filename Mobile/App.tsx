@@ -95,7 +95,7 @@ export default function App() {
           const structure = await generateArchitecture(content);
           setBlueprint(structure);
           if (mode === 'architecture') setBlueprintOpen(true);
-          if (autoSpeak) speak(structure.summary);
+          if (autoSpeak && mode === 'architecture') speak(structure.summary);
         } catch (architectureError) {
           const detail = architectureError instanceof Error ? architectureError.message : 'Blueprint failed';
           setMessages((current) => [...current, { id: `${Date.now()}-arch`, role: 'assistant', content: `Blueprint unavailable: ${detail}` }]);
@@ -158,6 +158,7 @@ export default function App() {
       const result = await requestPermission();
       if (!result.granted) return Alert.alert('Camera required', 'Allow camera access to use AR Lab.');
     }
+    setMode('ar');
     setCameraOpen(true);
   }
 
@@ -168,7 +169,15 @@ export default function App() {
   }[server];
 
   if (cameraOpen) {
-    return <HolographicAR blueprint={blueprint} onClose={() => setCameraOpen(false)} onSpeak={speak} />;
+    return <HolographicAR
+      blueprint={blueprint}
+      onClose={() => setCameraOpen(false)}
+      onSpeak={speak}
+      onVoiceToggle={toggleRecording}
+      isListening={recorderState.isRecording}
+      isTranscribing={transcribing}
+      isResponding={busy}
+    />;
   }
 
   return (

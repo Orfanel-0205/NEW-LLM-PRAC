@@ -112,14 +112,26 @@ export function speechSource(text: string): { uri: string; headers?: Record<stri
   };
 }
 
-export async function analyzeVision(uri: string, question: string): Promise<VisionResult> {
+export async function analyzeVision(uri: string, question: string, timeoutMs = 90000): Promise<VisionResult> {
   const form = new FormData();
   form.append('image', { uri, name: 'jarvis-scene.jpg', type: 'image/jpeg' } as unknown as Blob);
   form.append('question', question);
-  const response = await fetch(`${API_URL}/api/vision/analyze`, {
-    method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : undefined,
-    body: form,
-  });
-  return parse<VisionResult>(response);
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+  try {
+    const response = await fetch(`${API_URL}/api/vision/analyze`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : undefined,
+      body: form,
+      signal: controller.signal,
+    });
+    return await parse<VisionResult>(response);
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new Error('Visual scan timed out. Check the Jarvis server and try again.');
+    }
+    throw error;
+  } finally {
+    clearTimeout(timeout);
+  }
 }

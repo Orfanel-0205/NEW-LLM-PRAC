@@ -39,7 +39,9 @@ Inspect the image and return JSON only in this shape:
 "observation":"what is visibly evidenced","suggestion":"one useful action, or empty"}]}.
 
 Boxes use integer coordinates normalized 0-1000 for the displayed image. Detect at most 8 important items.
-Prioritize errors, code, logs, browser/devtools, controls, screens, documents, hardware, tools, obstacles,
+When a hand is clearly visible, include a 'Hand' detection and describe only visually evident coarse gestures
+such as open palm, pointing, or closed fist; never claim continuous landmark tracking from one image.
+Then prioritize errors, code, logs, browser/devtools, controls, screens, documents, hardware, tools, obstacles,
 and objects relevant to the user's question. Do not infer age, health, emotion, ethnicity, identity, or other
 sensitive traits from appearance. A person may only be labeled 'Person'. Distinguish evidence from hypotheses.
 Do not invent text that is not legible. If nothing technical is visible, identify ordinary objects and give
@@ -60,7 +62,7 @@ class VisionAnalyzer:
             model_name=VISION_MODEL,
             format="json",
             think=False,
-            options={"temperature": 0.1, "num_predict": 1200},
+            options={"temperature": 0.1, "num_predict": 600},
             keep_alive="30m",
         )
         try:

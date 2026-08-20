@@ -1,39 +1,82 @@
 import { CameraType, CameraView } from 'expo-camera';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ActivityIndicator, DimensionValue, Pressable, SafeAreaView, StyleSheet, Text, View,
+  ActivityIndicator, DimensionValue, PanResponder, Pressable, SafeAreaView, StyleSheet, Text,
+  useWindowDimensions, View,
 } from 'react-native';
+import Svg, { Line } from 'react-native-svg';
 import { analyzeVision, ArchitectureBlueprint, VisionDetection, VisionResult } from './api';
 
 type Props = {
   blueprint?: ArchitectureBlueprint;
   onClose: () => void;
   onSpeak: (text: string) => void;
+  onFlowRearranged: (nodeId: string, positions: Record<string, FlowPoint>) => void | Promise<void>;
   onVoiceToggle: () => void | Promise<void>;
   isListening: boolean;
   isTranscribing: boolean;
   isResponding: boolean;
 };
 
+type FlowPoint = { x: number; y: number };
+
 const VISUAL_FOCUS = 'Prioritize visible hands and clearly recognizable coarse gestures, then identify technical objects, screens, errors, controls, and useful next actions. Never infer personal traits.';
 
 export function HolographicAR({
-  blueprint, onClose, onSpeak, onVoiceToggle, isListening, isTranscribing, isResponding,
+  blueprint, onClose, onSpeak, onFlowRearranged, onVoiceToggle, isListening, isTranscribing, isResponding,
 }: Props) {
+  const { width, height } = useWindowDimensions();
   const camera = useRef<CameraView>(null);
   const scanning = useRef(false);
   const voiceBusyRef = useRef(false);
   const lastAnnouncement = useRef({ text: '', time: 0 });
   const lastErrorAnnouncement = useRef(0);
+  const flowPositionsRef = useRef<Record<string, FlowPoint>>({});
   const [facing, setFacing] = useState<CameraType>('back');
+  const [pictureSize, setPictureSize] = useState<string>();
   const [ready, setReady] = useState(false);
   const [result, setResult] = useState<VisionResult>();
   const [live, setLive] = useState(true);
   const [busy, setBusy] = useState(false);
   const [elapsed, setElapsed] = useState(0);
+  const [flowPositions, setFlowPositions] = useState<Record<string, FlowPoint>>({});
   const ownerAge = process.env.EXPO_PUBLIC_OWNER_AGE?.trim();
   const voiceBusy = isListening || isTranscribing || isResponding;
   voiceBusyRef.current = voiceBusy;
+
+  useEffect(() => {
+    if (!blueprint) {
+      flowPositionsRef.current = {};
+      return setFlowPositions({});
+    }
+    const next: Record<string, FlowPoint> = {};
+    blueprint.nodes.slice(0, 6).forEach((node, index) => {
+      next[node.id] = { x: index % 2 === 0 ? 14 : Math.max(14, width - 154), y: 145 + Math.floor(index / 2) * 92 };
+    });
+    flowPositionsRef.current = next;
+    setFlowPositions(next);
+  }, [blueprint, width]);
+
+  function moveFlowNode(nodeId: string, point: FlowPoint) {
+    const next = { ...flowPositionsRef.current, [nodeId]: point };
+    flowPositionsRef.current = next;
+    setFlowPositions(next);
+    void onFlowRearranged(nodeId, next);
+  }
+
+  async function cameraReady() {
+    try {
+      const sizes = await camera.current?.getAvailablePictureSizesAsync();
+      const ranked = (sizes ?? []).map((size) => {
+        const [w, h] = size.split('x').map(Number);
+        return { size, pixels: Number.isFinite(w * h) ? w * h : Number.MAX_SAFE_INTEGER };
+      }).sort((a, b) => a.pixels - b.pixels);
+      const practical = ranked.filter((item) => item.pixels >= 640 * 480 && item.pixels <= 1280 * 960).pop();
+      setPictureSize((practical ?? ranked[0])?.size);
+    } finally {
+      setReady(true);
+    }
+  }
 
   const scan = useCallback(async () => {
     if (scanning.current || !ready || !camera.current || voiceBusy) return;
@@ -92,28 +135,36 @@ export function HolographicAR({
 
   return (
     <View style={styles.page}>
-      <CameraView ref={camera} style={StyleSheet.absoluteFill} facing={facing} animateShutter={false} onCameraReady={() => setReady(true)} />
+      <CameraView ref={camera} style={StyleSheet.absoluteFill} facing={facing} pictureSize={pictureSize} animateShutter={false} onCameraReady={cameraReady} />
       <View pointerEvents="none" style={styles.grid} />
       <SafeAreaView style={styles.overlay} pointerEvents="box-none">
         <View style={styles.header}>
           <View><Text style={styles.kicker}>JARVIS AUTONOMOUS VISION</Text><Text style={styles.title}>{live ? 'LIVE SCAN ACTIVE' : 'SCAN PAUSED'}</Text></View>
           <View style={styles.headerActions}>
-            <Pressable style={styles.control} onPress={() => { setReady(false); setFacing((value) => value === 'back' ? 'front' : 'back'); }}><Text style={styles.controlText}>FLIP</Text></Pressable>
+            <Pressable style={styles.control} onPress={() => { setReady(false); setPictureSize(undefined); setFacing((value) => value === 'back' ? 'front' : 'back'); }}><Text style={styles.controlText}>FLIP</Text></Pressable>
             <Pressable style={styles.control} onPress={onClose}><Text style={styles.controlText}>CLOSE</Text></Pressable>
           </View>
         </View>
 
         <View style={styles.capability}><Text style={styles.capabilityText}>HAND VISION · AI SNAPSHOT MODE</Text></View>
         <View style={styles.scanLine} pointerEvents="none" />
-        <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <View pointerEvents="box-none" style={StyleSheet.absoluteFill}>
           {result?.detections.map((detection, index) => <DetectionCallout key={`${detection.id}-${index}`} detection={detection} />)}
           {seesPerson && facing === 'front' ? <View style={styles.ownerBadge}>
             <Text style={styles.ownerTitle}>OWNER PROFILE</Text><Text style={styles.ownerName}>GOSHUJIN-SAMA</Text>
             <Text style={styles.ownerMeta}>AGE · {ownerAge || 'NOT CONFIGURED'}</Text><Text style={styles.ownerMeta}>STATUS · PRESENT</Text>
           </View> : null}
-          {blueprint?.nodes.slice(0, 4).map((node, index) => <View key={node.id} style={[styles.workflowCard, { top: 145 + index * 68, right: 12 + (index % 2) * 20 }]}>
-            <Text style={styles.workflowIndex}>0{index + 1}</Text><Text style={styles.workflowLabel}>{node.label}</Text><Text style={styles.workflowKind}>{node.kind}</Text>
-          </View>)}
+          {blueprint ? <Svg pointerEvents="none" width={width} height={height} style={StyleSheet.absoluteFill}>
+            {blueprint.edges.map((edge, index) => {
+              const from = flowPositions[edge.source]; const to = flowPositions[edge.target];
+              if (!from || !to) return null;
+              return <Line key={`${edge.source}-${edge.target}-${index}`} x1={from.x + 66} y1={from.y + 30} x2={to.x + 66} y2={to.y + 30} stroke="#a78bfa" strokeWidth="2" strokeDasharray="6 4" />;
+            })}
+          </Svg> : null}
+          {blueprint?.nodes.slice(0, 6).map((node, index) => {
+            const point = flowPositions[node.id];
+            return point ? <MovableWorkflowCard key={node.id} index={index} node={node} position={point} bounds={{ width, height }} onMove={moveFlowNode} /> : null;
+          })}
         </View>
 
         <View style={styles.console}>
@@ -122,11 +173,48 @@ export function HolographicAR({
             <Pressable disabled={isTranscribing || isResponding} style={[styles.voiceButton, isListening && styles.voiceButtonActive]} onPress={onVoiceToggle}><Text style={styles.voiceText}>{voiceLabel}</Text></Pressable>
             <Pressable style={[styles.pauseButton, !live && styles.resumeButton]} onPress={() => setLive((value) => !value)}><Text style={styles.pauseText}>{live ? 'PAUSE SCAN' : 'RESUME SCAN'}</Text></Pressable>
           </View>
-          <Text style={styles.disclaimer}>AI snapshots detect visible hands and objects automatically. Continuous hand landmarks require the native development build.</Text>
+          <Text style={styles.disclaimer}>Drag a flow node to request a critical spoken review. AI snapshots can see hands; true hover/pinch control requires the native landmark build.</Text>
         </View>
       </SafeAreaView>
     </View>
   );
+}
+
+function MovableWorkflowCard({ index, node, position, bounds, onMove }: {
+  index: number;
+  node: ArchitectureBlueprint['nodes'][number];
+  position: FlowPoint;
+  bounds: { width: number; height: number };
+  onMove: (nodeId: string, point: FlowPoint) => void;
+}) {
+  const [point, setPoint] = useState(position);
+  const pointRef = useRef(position);
+  const start = useRef(position);
+  const boundsRef = useRef(bounds);
+  const onMoveRef = useRef(onMove);
+  boundsRef.current = bounds;
+  onMoveRef.current = onMove;
+  useEffect(() => { pointRef.current = position; setPoint(position); }, [position]);
+  const responder = useRef(PanResponder.create({
+    onStartShouldSetPanResponder: () => true,
+    onMoveShouldSetPanResponder: (_, gesture) => Math.abs(gesture.dx) + Math.abs(gesture.dy) > 4,
+    onPanResponderGrant: () => { start.current = pointRef.current; },
+    onPanResponderMove: (_, gesture) => {
+      const next = {
+        x: Math.max(8, Math.min(boundsRef.current.width - 140, start.current.x + gesture.dx)),
+        y: Math.max(110, Math.min(boundsRef.current.height - 190, start.current.y + gesture.dy)),
+      };
+      pointRef.current = next;
+      setPoint(next);
+    },
+    onPanResponderRelease: (_, gesture) => {
+      if (Math.abs(gesture.dx) + Math.abs(gesture.dy) > 8) onMoveRef.current(node.id, pointRef.current);
+    },
+    onPanResponderTerminate: () => onMoveRef.current(node.id, pointRef.current),
+  })).current;
+  return <View {...responder.panHandlers} style={[styles.workflowCard, { left: point.x, top: point.y }]}>
+    <Text style={styles.workflowIndex}>0{index + 1} · DRAG</Text><Text style={styles.workflowLabel}>{node.label}</Text><Text style={styles.workflowKind}>{node.kind}</Text>
+  </View>;
 }
 
 function DetectionCallout({ detection }: { detection: VisionDetection }) {
@@ -152,7 +240,7 @@ const styles = StyleSheet.create({
   detectBox: { position: 'absolute', borderWidth: 1.5, borderColor: '#22d3ee', backgroundColor: 'rgba(8,145,178,.06)' }, cornerTopLeft: { position: 'absolute', left: -2, top: -2, width: 18, height: 18, borderLeftWidth: 4, borderTopWidth: 4, borderColor: '#a5f3fc' }, cornerBottomRight: { position: 'absolute', right: -2, bottom: -2, width: 18, height: 18, borderRightWidth: 4, borderBottomWidth: 4, borderColor: '#a5f3fc' },
   callout: { position: 'absolute', left: 8, top: -4, minWidth: 145, maxWidth: 225, transform: [{ translateY: -58 }], padding: 7, borderLeftWidth: 2, borderLeftColor: '#22d3ee', backgroundColor: 'rgba(2,20,36,.88)' }, detectLabel: { color: '#ecfeff', fontSize: 10, fontWeight: '900', letterSpacing: 1 }, detectObservation: { color: '#a5f3fc', fontSize: 9, marginTop: 2 }, detectSuggestion: { color: '#bef264', fontSize: 8, marginTop: 3 },
   ownerBadge: { position: 'absolute', left: 15, top: 125, padding: 10, borderWidth: 1, borderColor: '#f472b6', backgroundColor: 'rgba(35,8,35,.82)' }, ownerTitle: { color: '#f9a8d4', fontSize: 8, letterSpacing: 2 }, ownerName: { color: '#fdf2f8', fontSize: 15, fontWeight: '900' }, ownerMeta: { color: '#fbcfe8', fontSize: 9, marginTop: 2 },
-  workflowCard: { position: 'absolute', width: 125, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#a78bfa', backgroundColor: 'rgba(30,18,64,.8)' }, workflowIndex: { color: '#c4b5fd', fontSize: 8 }, workflowLabel: { color: '#f5f3ff', fontSize: 11, fontWeight: '800' }, workflowKind: { color: '#a78bfa', fontSize: 8, textTransform: 'uppercase' },
+  workflowCard: { position: 'absolute', width: 132, minHeight: 60, padding: 8, borderRadius: 8, borderWidth: 1, borderColor: '#a78bfa', backgroundColor: 'rgba(30,18,64,.9)' }, workflowIndex: { color: '#c4b5fd', fontSize: 8 }, workflowLabel: { color: '#f5f3ff', fontSize: 11, fontWeight: '800' }, workflowKind: { color: '#a78bfa', fontSize: 8, textTransform: 'uppercase' },
   console: { marginTop: 'auto', margin: 12, padding: 10, borderRadius: 12, borderWidth: 1, borderColor: '#22d3ee', backgroundColor: 'rgba(2,12,27,.90)' }, sceneRow: { flexDirection: 'row', alignItems: 'center', gap: 8, minHeight: 32 }, liveDot: { width: 8, height: 8, borderRadius: 4, backgroundColor: '#34d399' }, listeningDot: { backgroundColor: '#fb7185' }, scene: { flex: 1, color: '#cffafe', fontSize: 11 },
   actionRow: { flexDirection: 'row', gap: 8, marginTop: 7 }, voiceButton: { flex: 1.4, alignItems: 'center', padding: 10, borderRadius: 7, backgroundColor: '#0e7490' }, voiceButtonActive: { backgroundColor: '#be123c' }, voiceText: { color: '#ecfeff', fontWeight: '900', fontSize: 10, letterSpacing: 1 }, pauseButton: { flex: 1, alignItems: 'center', padding: 10, borderRadius: 7, backgroundColor: '#164e63' }, resumeButton: { backgroundColor: '#0f766e' }, pauseText: { color: '#ecfeff', fontWeight: '900', fontSize: 10, letterSpacing: 1 }, disclaimer: { color: '#6f93a5', fontSize: 8, lineHeight: 11, marginTop: 6 },
 });

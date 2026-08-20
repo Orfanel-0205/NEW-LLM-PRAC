@@ -82,6 +82,21 @@ export default function App() {
     setInput('');
     setBusy(true);
     try {
+      const requestsBlueprint = mode === 'architecture' || mode === 'ux' || (
+        mode === 'ar' && /\b(architecture|blueprint|diagram|flow|journey|map|structure|workflow|ux)\b/i.test(content)
+      );
+      if (requestsBlueprint) {
+        const structure = await generateArchitecture(content);
+        setBlueprint(structure);
+        if (mode === 'architecture') setBlueprintOpen(true);
+        setMessages((current) => [
+          ...current,
+          { id: `${Date.now()}-a`, role: 'assistant', content: structure.summary },
+        ]);
+        if (autoSpeak) speak(structure.summary);
+        setServer('ready');
+        return;
+      }
       const result = await sendChat(content, mode, sessionId);
       setSessionId(result.session_id);
       await AsyncStorage.setItem(SESSION_KEY, result.session_id);
@@ -90,17 +105,6 @@ export default function App() {
         { id: `${Date.now()}-a`, role: 'assistant', content: result.reply },
       ]);
       if (autoSpeak) speak(result.reply);
-      if (mode === 'architecture' || mode === 'ar' || mode === 'ux') {
-        try {
-          const structure = await generateArchitecture(content);
-          setBlueprint(structure);
-          if (mode === 'architecture') setBlueprintOpen(true);
-          if (autoSpeak && mode === 'architecture') speak(structure.summary);
-        } catch (architectureError) {
-          const detail = architectureError instanceof Error ? architectureError.message : 'Blueprint failed';
-          setMessages((current) => [...current, { id: `${Date.now()}-arch`, role: 'assistant', content: `Blueprint unavailable: ${detail}` }]);
-        }
-      }
       setServer('ready');
     } catch (error) {
       const detail = error instanceof Error ? error.message : 'Unknown network error';
@@ -116,6 +120,29 @@ export default function App() {
   }
 
   async function submit() { await submitText(input); }
+
+  async function critiqueFlow(movedNodeId: string, positions: Record<string, { x: number; y: number }>) {
+    if (!blueprint || busy) return;
+    setBusy(true);
+    const topology = blueprint.edges.map((edge) => `${edge.source}->${edge.target}:${edge.label}`).join(', ');
+    const placement = blueprint.nodes.map((node) => {
+      const point = positions[node.id];
+      return `${node.id}(${node.kind})@${point ? `${Math.round(point.x)},${Math.round(point.y)}` : 'unplaced'}`;
+    }).join(', ');
+    const request = `Critically review this UX flow after I moved ${movedNodeId}. Topology: ${topology}. Spatial placement: ${placement}. Identify the most serious usability risk, any misleading ordering or missing recovery path, and one concrete correction. Be concise and do not praise the flow.`;
+    try {
+      const result = await sendChat(request, 'ux', sessionId);
+      setSessionId(result.session_id);
+      await AsyncStorage.setItem(SESSION_KEY, result.session_id);
+      setMessages((current) => [...current, { id: `${Date.now()}-a`, role: 'assistant', content: result.reply }]);
+      if (autoSpeak) speak(result.reply);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : 'Flow critique failed';
+      Alert.alert('Flow critique failed', detail);
+    } finally {
+      setBusy(false);
+    }
+  }
 
   async function toggleRecording() {
     if (recorderState.isRecording) {
@@ -173,6 +200,7 @@ export default function App() {
       blueprint={blueprint}
       onClose={() => setCameraOpen(false)}
       onSpeak={speak}
+      onFlowRearranged={critiqueFlow}
       onVoiceToggle={toggleRecording}
       isListening={recorderState.isRecording}
       isTranscribing={transcribing}

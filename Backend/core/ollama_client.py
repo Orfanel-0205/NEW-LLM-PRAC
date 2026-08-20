@@ -62,6 +62,15 @@ class OllamaClient:
         try:
             with urllib.request.urlopen(request, timeout=self.timeout) as response:
                 data = json.load(response)
+        except urllib.error.HTTPError as exc:
+            response_body = exc.read().decode("utf-8", errors="replace")
+            try:
+                error_payload = json.loads(response_body)
+                detail = error_payload.get("error", response_body) if isinstance(error_payload, dict) else response_body
+            except json.JSONDecodeError:
+                detail = response_body
+            detail = str(detail).strip()[:500] or exc.reason
+            raise RuntimeError(f"Ollama rejected request ({exc.code}): {detail}") from exc
         except urllib.error.URLError as exc:
             raise RuntimeError(f"Unable to reach Ollama at {self.base_url}: {exc}") from exc
 

@@ -27,7 +27,8 @@ class LocalTranscriber:
             model = self._get_model()
             segments, _ = model.transcribe(
                 str(audio_path),
-                beam_size=3,
+                beam_size=1,
+                language="en",
                 vad_filter=True,
                 condition_on_previous_text=False,
             )

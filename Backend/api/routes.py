@@ -12,6 +12,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, File, Form, Header, HTTPException, Query, UploadFile
 from fastapi.responses import Response
 from pydantic import BaseModel, Field
+from starlette.concurrency import run_in_threadpool
 
 from core.config import API_TOKEN, DEFAULT_MODEL, VISION_MODEL
 from core.architecture import ArchitectureBlueprint, ArchitectureGenerator
@@ -119,7 +120,8 @@ async def transcribe(audio: UploadFile = File(...)) -> dict:
         with tempfile.NamedTemporaryFile(delete=False, suffix=suffix) as temporary:
             temporary.write(contents)
             temp_path = Path(temporary.name)
-        return {"text": transcriber.transcribe(temp_path)}
+        text = await run_in_threadpool(transcriber.transcribe, temp_path)
+        return {"text": text}
     except HTTPException:
         raise
     except RuntimeError as exc:
@@ -141,7 +143,7 @@ async def analyze_vision(
         raise HTTPException(status_code=413, detail="Image must be between 1 byte and 8 MB")
     image_data = base64.b64encode(contents).decode("ascii")
     try:
-        return vision_analyzer.analyze(image_data, question)
+        return await run_in_threadpool(vision_analyzer.analyze, image_data, question)
     except RuntimeError as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 

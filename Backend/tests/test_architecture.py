@@ -10,7 +10,7 @@ class FakeClient:
         self.payload = payload
 
     def chat(self, messages, **kwargs):
-        assert kwargs["format"] == "json"
+        assert isinstance(kwargs["format"], dict)
         return json.dumps(self.payload)
 
 
@@ -29,7 +29,7 @@ def test_architecture_generator_validates_blueprint():
     assert result.edges[0].target == "api"
 
 
-def test_architecture_rejects_missing_edge_node():
+def test_architecture_discards_missing_edge_node():
     payload = {
         "title": "Broken",
         "summary": "Invalid reference.",
@@ -39,5 +39,20 @@ def test_architecture_rejects_missing_edge_node():
         ],
         "edges": [{"source": "a", "target": "missing", "label": "HTTP"}],
     }
-    with pytest.raises(RuntimeError):
-        ArchitectureGenerator(FakeClient(payload)).generate("broken")
+    result = ArchitectureGenerator(FakeClient(payload)).generate("broken")
+    assert result.edges == []
+
+
+def test_architecture_repairs_ids_and_edge_references():
+    payload = {
+        "title": "UX flow",
+        "summary": "A critical checkout flow.",
+        "nodes": [
+            {"id": "search screen", "label": "Search", "kind": "screen", "description": "Find products"},
+            {"id": "checkout screen", "label": "Checkout", "kind": "screen", "description": "Pay"},
+        ],
+        "edges": [{"source": "search screen", "target": "checkout screen", "label": "select"}],
+    }
+    result = ArchitectureGenerator(FakeClient(payload)).generate("checkout UX")
+    assert [node.id for node in result.nodes] == ["search_screen", "checkout_screen"]
+    assert result.edges[0].target == "checkout_screen"

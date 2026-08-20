@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import re
 from typing import Dict, List
 
 from pydantic import BaseModel, Field, model_validator
@@ -61,15 +62,15 @@ class ArchitectureGenerator:
                 {"role": "system", "content": ARCHITECT_PROMPT},
                 {"role": "user", "content": request.strip()},
             ],
-            format="json",
-            options={"temperature": 0.2},
+            format=ArchitectureBlueprint.model_json_schema(),
+            options={"temperature": 0.1, "num_predict": 1000},
         )
         try:
             payload: Dict[str, object] = json.loads(raw)
             self._normalize(payload)
             return ArchitectureBlueprint.model_validate(payload)
         except (json.JSONDecodeError, ValueError) as exc:
-            raise RuntimeError("Jarvis could not create a valid architecture blueprint") from exc
+            raise RuntimeError(f"Jarvis could not create a valid architecture blueprint: {exc}") from exc
 
     @staticmethod
     def _normalize(payload: Dict[str, object]) -> None:
@@ -83,9 +84,24 @@ class ArchitectureGenerator:
         nodes = payload.get("nodes")
         if not isinstance(nodes, list):
             return
-        for raw_node in nodes:
+        nodes = [node for node in nodes if isinstance(node, dict)][:10]
+        payload["nodes"] = nodes
+        aliases: Dict[str, str] = {}
+        node_ids = set()
+        for index, raw_node in enumerate(nodes):
             if not isinstance(raw_node, dict):
                 continue
+            original_id = str(raw_node.get("id", f"node_{index}"))
+            clean_id = re.sub(r"[^a-zA-Z0-9_-]+", "_", original_id).strip("_")[:32] or f"node_{index}"
+            candidate = clean_id
+            suffix = 2
+            while candidate in node_ids:
+                candidate = f"{clean_id[:35]}_{suffix}"
+                suffix += 1
+            raw_node["id"] = candidate
+            aliases.setdefault(original_id, candidate)
+            aliases.setdefault(clean_id, candidate)
+            node_ids.add(candidate)
             kind = str(raw_node.get("kind", "service")).lower().strip()
             valid_kinds = {"client", "service", "data", "external", "actor", "screen", "action", "decision"}
             raw_node["kind"] = kind_aliases.get(kind, kind if kind in valid_kinds else "service")
@@ -93,3 +109,22 @@ class ArchitectureGenerator:
             raw_node["description"] = str(raw_node.get("description", ""))[:180]
         payload["title"] = str(payload.get("title", "Software Architecture"))[:100]
         payload["summary"] = str(payload.get("summary", ""))[:600]
+        edges = payload.get("edges")
+        if not isinstance(edges, list):
+            payload["edges"] = []
+            return
+        normalized_edges = []
+        for raw_edge in edges[:16]:
+            if not isinstance(raw_edge, dict):
+                continue
+            source_raw = str(raw_edge.get("source", ""))
+            target_raw = str(raw_edge.get("target", ""))
+            source = aliases.get(source_raw, aliases.get(re.sub(r"[^a-zA-Z0-9_-]+", "_", source_raw).strip("_"), source_raw))
+            target = aliases.get(target_raw, aliases.get(re.sub(r"[^a-zA-Z0-9_-]+", "_", target_raw).strip("_"), target_raw))
+            if source not in node_ids or target not in node_ids or source == target:
+                continue
+            raw_edge["source"] = source
+            raw_edge["target"] = target
+            raw_edge["label"] = str(raw_edge.get("label", ""))[:50]
+            normalized_edges.append(raw_edge)
+        payload["edges"] = normalized_edges
